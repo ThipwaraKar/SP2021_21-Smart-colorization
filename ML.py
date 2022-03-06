@@ -9,20 +9,21 @@ from tkinter import filedialog
 from model import NeuralNetwork
 import Local_Binary_Patterns as lbp
 
+#feature extraction = turn attribute to no.
 def Feature_extraction():
 
     count = 0
-    for i in range(8):
+    for i in range(7):
         for r, d, f in os.walk('Training\\' + str(i)):
             for file in f:
                 if file.endswith(".bmp"):
                     count += 1
 
     X_train = np.zeros(shape=(count, 26))
-    y_train = np.zeros(shape=(count, 8))
+    y_train = np.zeros(shape=(count, 7))
 
     count = 0
-    for i in range(8):
+    for i in range(7):
         for r, d, f in os.walk('Training\\' + str(i)):
             for file in f:
                 if file.endswith(".bmp"):
@@ -33,7 +34,7 @@ def Feature_extraction():
                     ret, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
                     # LBP
-                    cls_lbp = lbp.LocalBinaryPatterns(24, 8)
+                    cls_lbp = lbp.LocalBinaryPatterns(24, 7)
                     feature = cls_lbp.describe(binary)
 
                     c = 0
@@ -41,10 +42,10 @@ def Feature_extraction():
                         X_train[count, c] = feature[m]
                         c += 1
 
-                    target = np.zeros(shape=(1, 8))
+                    target = np.zeros(shape=(1, 7))
                     target[0, i] = 1
 
-                    for k in range(8):
+                    for k in range(7):
                         y_train[count, k] = target[0, k]
 
                     count += 1
@@ -57,9 +58,9 @@ def ANN_training():
     [X_train, y_train] = Feature_extraction()
 
     # Neural network training
-    input_size = 26
-    hidden_size = 24
-    output_size = 15
+    input_size = 26 #should be the same no. of feature
+    hidden_size = 28 #change to the best fit T^T //how many node &
+    output_size = 7
     epoch = 200000
     mse = 0.0001
     layer_sizes = [input_size, hidden_size, output_size]
@@ -75,6 +76,46 @@ def ANN_training():
     model_path = "nn_model.xml"
     nn.save_model(model_path)
 
+def fill_color(result, rgb_fill_color, cnt):
+    # fill color by class
+    result = int(result)
+    color_name = ''
+    if result == 0 or result == 2 or result == 5 or result == 7:
+        color_name = 'Body.txt'
+    elif result == 1:
+        color_name = 'Eye.txt'
+    elif result == 3:
+        color_name = 'Mouth.txt'
+    elif result == 4 or result == 6:
+        color_name = 'Hair.txt'
+
+    # condition that filled same color on the body parts [head, ears, throat, and can't define]
+    #if you want to add more body color, you can add in the body.txt with rgb code
+
+    # Color Brown line 0, Tan line 1, Yellow line 2, White line 3, Pink White line 4
+    if result == 0 or result == 2 or result == 5 or result == 7:
+        num_line = 4
+    else:
+        num_line = random.randint(0, 4)
+
+    # print('Color\\' + color_name)
+    with open('Color\\' + color_name) as file:
+        c = 0
+        for line in file:
+            if c == num_line:
+                R = int(line.split(',')[0].strip())
+                G = int(line.split(',')[1].strip())
+                B = int(line.split(',')[2].strip())
+                # print('{} , {} , {}'.format(R, G, B))
+                cv2.drawContours(rgb_fill_color, [cnt], -1, (B, G, R), thickness=-1)
+
+                # save as .jpg type but if want to change just change .jpg to .png or .bmp
+                cv2.imwrite('filled.jpg', rgb_fill_color)
+                rgb_color = cv2.resize(rgb_fill_color.copy(), (1024, 768), interpolation=cv2.INTER_LINEAR)
+                cv2.imshow('All Colors', rgb_color)
+                break
+            c += 1
+
 def Classify():
 
     # Clear old files
@@ -83,10 +124,9 @@ def Classify():
         os.remove(os.path.join('Classify', f))
 
     # Opendialog
-    file = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select file",
-                                      filetypes=(("PNG files", "*.png"), ("all files", "*.*")))
+    file = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select file", filetypes=(("PNG files", "*.png"), ("all files", "*.*")))
     rgb = cv2.imread(file, cv2.IMREAD_UNCHANGED)
-    # cv2.imshow('All Contours', rgb[:, :, 3])
+    #cv2.imshow('All Contours', rgb[:, :, 3])
     gray = rgb[:, :, 3];
 
     # Binary (OTSU)
@@ -107,7 +147,7 @@ def Classify():
 
     # Check position of interested
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    # cv2.imwrite('binary_test.bmp', binary)
+    #cv2.imwrite('binary_test.bmp', binary)
 
     cs = 0
     for cnt in contours:
@@ -119,9 +159,9 @@ def Classify():
         cv2.imwrite('Classify/' + str(cs) + '.bmp', ROI)
 
         # Feature extraction ( LBP )
-        cls_lbp = lbp.LocalBinaryPatterns(24, 8)
+        cls_lbp = lbp.LocalBinaryPatterns(24, 7)
         feature = cls_lbp.describe(ROI)
-        # print(feature)
+        #print(feature)
 
         # Neural network classification
         X_test = np.zeros(shape=(1, 26))
@@ -136,60 +176,19 @@ def Classify():
         nn.load_model('nn_model.xml')
         result = nn.predict(X_test)
         print(result)
-        cv2.putText(rgb, str(result).replace('[', '').replace(']', ''), (x + int(w / 2), y + int(h / 2)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 2.5, (255, 0, 0, 255), 5, lineType=cv2.LINE_AA)
+        cv2.putText(rgb, str(result).replace('[', '').replace(']', ''), (x + int(w/2), y + int(h/2)), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (255, 0, 0, 255), 5, lineType=cv2.LINE_AA)
 
         cs += 1
 
-        #fill color by class
-        result = int(result)
-        color_name = ''
-        if result == 0:
-            color_name = 'Body.txt'
-        if result == 1:
-            color_name = 'Eye.txt'
-        elif result == 2:
-            color_name = 'Body.txt'
-        elif result == 3:
-            color_name = 'Mouth.txt'
-        elif result == 4:
-            color_name = 'Hair.txt'
-        elif result == 5:
-            color_name = 'Body.txt'
-        elif result == 6:
-            color_name = 'Hair.txt'
-        elif result == 7:
-            color_name = 'Body.txt'
-
-        #condition that filled same color on the body parts [head, ears, throat, and can't define]
-        #if result == 0 or result == 2 or result == 5 or result == 7:
-
-         #   num_line =
-        #else:
-        num_line = random.randint(0, 4)
-
-        print('Color\\' + color_name)
-        with open('Color\\' + color_name) as file:
-            c = 0
-            for line in file:
-                if c == num_line:
-                    R = int(line.split(',')[0].strip())
-                    G = int(line.split(',')[1].strip())
-                    B = int(line.split(',')[2].strip())
-                    print('{} , {} , {}'.format(R, G, B))
-                    cv2.drawContours(rgb_fill_color, [cnt], -1, (B, G, R), thickness=-1)
-
-                    #save as .jpg type but if want to change just change .jpg to .png or .bmp
-                    cv2.imwrite('filled.jpg', rgb_fill_color)
-                    break
-                c += 1
+        # fill color
+        fill_color(result, rgb_fill_color, cnt)
 
     # Resize
-    # r, g, b, a = rgb.split()
-    # img = Image.merge("RGB", (r, g, b))
+    #r, g, b, a = rgb.split()
+    #img = Image.merge("RGB", (r, g, b))
 
-    rgb_extract = cv2.resize(rgb, (800, 500), interpolation=cv2.INTER_LINEAR)
-    # cv2.imshow('x', rgb_extract)
+    rgb_extract = cv2.resize(rgb, (640, 480), interpolation=cv2.INTER_LINEAR)
+    #cv2.imshow('x', rgb_extract)
 
     # Show in tkinter label
     prevImg = Image.fromarray(rgb_extract)
@@ -198,22 +197,22 @@ def Classify():
     panel.configure(image=imgtk)
 
 def Extract_UV():
+
     # Clear old files
     filelist = [f for f in os.listdir('Extract') if f.endswith(".bmp")]
     for f in filelist:
         os.remove(os.path.join('Extract', f))
 
     # Opendialog
-    file = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select file",
-                                      filetypes=(("PNG files", "*.png"), ("all files", "*.*")))
+    file = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select file", filetypes=(("PNG files", "*.png"), ("all files", "*.*")))
     rgb = cv2.imread(file, cv2.IMREAD_UNCHANGED)
 
-    gray = rgb[:, :, 3];
+    gray = rgb[:, : , 3];
 
-    # cv2.imwrite('rgb.bmp', rgb)
+    #cv2.imwrite('rgb.bmp', rgb)
 
     # Gray scale
-    # gray = rgb #cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    #gray = rgb #cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
 
     # Binary (OTSU)
     ret, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -258,16 +257,19 @@ if __name__ == "__main__":
     panel = tk.Label(mainWindow, compound=tk.CENTER, anchor=tk.CENTER, bg="white")
     panel.place(x=10, y=10, bordermode="outside", height=480, width=640)
 
-    button_webcam_start = tk.Button(mainWindow, text="Classify", command=Classify, height=3, width=20)
-    button_webcam_start.place(x=660, y=10, width=130, height=40)
+    button_classify = tk.Button(mainWindow, text="Classify", command=Classify, height=3, width=20)
+    button_classify.place(x=660, y=10, width=130, height=40)
 
-    button_webcam_stop = tk.Button(mainWindow, text="Training ML", command=ANN_training, height=3, width=20)
-    button_webcam_stop.place(x=660, y=55, width=130, height=40)
+    button_train = tk.Button(mainWindow, text="Training ML", command=ANN_training, height=3, width=20)
+    button_train.place(x=660, y=55, width=130, height=40)
 
-    button_webcam_video = tk.Button(mainWindow, text="Extract UV map", command=Extract_UV, height=3, width=20)
-    button_webcam_video.place(x=660, y=100, width=130, height=40)
+    button_extract = tk.Button(mainWindow, text="Extract UV map", command=Extract_UV, height=3, width=20)
+    button_extract.place(x=660, y=100, width=130, height=40)
 
-    button_webcam_exit = tk.Button(mainWindow, text="Exit", command=exit, height=3, width=20)
-    button_webcam_exit.place(x=660, y=450, width=130, height=40)
+    button_color = tk.Button(mainWindow, text="Color", command=fill_color, height=3, width=20)
+    button_color.place(x=660, y=145, width=130, height=40)
+
+    button_exit = tk.Button(mainWindow, text="Exit", command=exit, height=3, width=20)
+    button_exit.place(x=660, y=450, width=130, height=40)
 
     mainWindow.mainloop()
